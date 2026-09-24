@@ -11,10 +11,12 @@ lines(dum_intpl$x,dum_intpl$y,col="red")
 lines(dum_intpl$x,dum_sg,col="blue")
 install.packages("signal")
 library(signal)
-dum_intplsig<-interp1(dtime_sam,dtemp_sam,xi = seq(0,max(dtime_sam),by=0.2),method = "linear",extrap = T)
+library(pracma)
+
+dum_intplsig<-signal::interp1(dtime_sam,dtemp_sam,xi = seq(0,max(dtime_sam),by=0.2),method = "linear",extrap = T)
 dum_sg<-savgol(dum_intplsig,31,2)
 
-dum_intplref<-interp1(dtime_ref,dtemp_ref,xi = seq(0,max(dtime_sam),by=0.2),method = "linear",extrap = T)
+dum_intplref<-signal::interp1(dtime_ref,dtemp_ref,xi = seq(0,max(dtime_sam),by=0.2),method = "linear",extrap = T)
 dum_sgref<-savgol(dum_intplref,31,2)
 plot(dum_intplref[20:2270],dum_sg[20:2270] - dum_sgref[20:2270],type = "l")
 lines(dum_intplref,dtemp_sam - dtemp_ref,type = "l",col="red")
@@ -22,6 +24,13 @@ lines(dum_intplref,dtemp_sam - dtemp_ref,type = "l",col="red")
 
 dum_sgdtdt<-savgol(dum_intplsig,31,2,1)
 plot(dum_intplref[20:2270],(dum_sg[20:2270] - dum_sgref[20:2270])/dum_sgdtdt[20:2270]*300,type = "l")
+plot(dum_intplref[20:2270],dum_sgdtdt[20:2270]*300,type = "l")
 lines(dum_intplref,dtemp_sam - dtemp_ref,type = "l",col="red")
 
 
+
+dum_spldata<-splitData(dum_dtadata,T)
+dum_rsdata<-rsmplData(dum_spldata,resist = T)
+dum_sgdata<-sgsmoothdata(dum_rsdata,31,resist = T)
+
+plot(dum_sgdata$Time[30:2260],dum_sgdata$Temp_sa[30:2260] - dum_rsdata$Temp_sa[30:2260],type = "l")

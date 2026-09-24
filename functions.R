@@ -134,7 +134,9 @@ int_dsc<-function(res_list){
   return(int_list)
 }
 
-splitData<-function(dtadata, dt=0.2, resist=F){
+
+
+splitData<-function(dtadata, resist=F, C2K=T){
   #length adjustment
   rowex<-which(dtadata$Channel==1)
   rowsa<-which(dtadata$Channel==3)
@@ -167,6 +169,12 @@ splitData<-function(dtadata, dt=0.2, resist=F){
   tim_sa<-data_sa$Relative.Time
   tim_re<-data_re$Relative.Time
   
+  if(C2K){
+    tmp_ex<-tmp_ex+273.15
+    tmp_sa<-tmp_sa+273.15
+    tmp_re<-tmp_re+273.15
+  }
+  
   spldata<-cbind(tim_ex,tmp_ex,tim_sa,tmp_sa,tim_re,tmp_re)
   colnames(spldata)<-c("Time_ex","Temp_ex","Time_sa","Temp_sa","Time_re","Temp_re")
   if(resist){
@@ -180,69 +188,55 @@ splitData<-function(dtadata, dt=0.2, resist=F){
     spldata<-cbind(spldata,splres)
   }
   
-  return(spldata)
+  return(as.data.frame(spldata))
 }
 
-rsmplData<-function(splitdata, dt=0.2){
+rsmplData<-function(spldata, dt=0.2, resist=F){
   #resampling
-  tim_rs<-seq(0,max(tim_ex),by=dt)
+  tim_rs<-seq(0,max(spldata$Time_ex),by=dt)
   
-  tmp_exrs<-interp1(tim_ex,tmp_ex,xi = tim_rs,method = "linear",extrap = T)
-  tmp_sars<-interp1(tim_sa,tmp_sa,xi = tim_rs,method = "linear",extrap = T)
-  tmp_rers<-interp1(tim_re,tmp_re,xi = tim_rs,method = "linear",extrap = T)
+  tmp_exrs<-signal::interp1(spldata$Time_ex,spldata$Temp_ex,xi = tim_rs,method = "linear",extrap = T)
+  tmp_sars<-signal::interp1(spldata$Time_sa,spldata$Temp_sa,xi = tim_rs,method = "linear",extrap = T)
+  tmp_rers<-signal::interp1(spldata$Time_re,spldata$Temp_re,xi = tim_rs,method = "linear",extrap = T)
   
-  if(resist){
-    tmp_mars<-interp1(tim_ma,tmp_ma,xi = tim_rs,method = "linear",extrap = T)
-  }
-  
-  
-  #bspline interpolation
-  
-  
-  
-  sim_sa<-LSM_bspline(tim_sa,tmp_sa,xi=0.001,dt_in = 6)
-  sim_re<-LSM_bspline(tim_re,tmp_re,xi=0.001,dt_in = 6)
+  rsdata<-cbind(tim_rs,tmp_exrs,tmp_sars,tmp_rers)
+  colnames(rsdata)<-c("Time","Temp_ex","Temp_sa","Temp_re")
   
   if(resist){
-    sim_ma<-LSM_bspline(tim_ma,res_ma,xi=0.001,dt_in = 6)
+    Resist<-signal::interp1(spldata$Time_ma,spldata$Resist,xi = tim_rs,method = "linear",extrap = T)
+    rsdata<-cbind(rsdata,Resist)
   }
   
-  #differential
+  return(as.data.frame(rsdata) )
   
-  dtim_re<-c()
-  dtmpdtim_re<-c()
   
-  for(i0 in 1:(minlen-1)){
-    dtim_re<-c(dtim_re,(tim_re[i0]+tim_re[i0+1])/2)
-    dtmpdtim_re<-c(dtmpdtim_re,60*(tmp_re[i0+1]-tmp_re[i0])/(tim_re[i0+1]-tim_re[i0]))
-  }
-  
-  sim_dps<-seq(2,nrow(sim_re)-1,by=2)
-  sim_dtim<-sim_re[sim_dps,1]
-  sim_dtmpdtim<-c()
-  
-  #dtout=0.05
-  #"*6" means dt=0.05*2,K/min->*60
-  for(i1 in sim_dps){
-    sim_dtmpdtim<-c(sim_dtmpdtim,(sim_re[i1+1,2]-sim_re[i1-1,2])*600)
-  }
-  
-  #summarise
-  rawdata<-data.frame(tmp_ex=tmp_ex,tmp_sa=tmp_sa,tmp_re=tmp_re,
-                      tim_ex=tim_ex,tim_sa=tim_sa,tim_re=tim_re,
-                      dtmp=tmp_sa-tmp_re)
-  
-  intpl<-data.frame(tmp_sa=sim_sa[,2],tmp_re=sim_re[,2],
-                    tim_sa=sim_sa[,1],tim_re=sim_re[,1],
-                    dtmp=sim_sa[,2]-sim_re[,2])
-  dif_exp<-data.frame(dtim=dtim_re,dtdt=dtmpdtim_re)
-  dif_sim<-data.frame(dtim=sim_dtim,dtdt=sim_dtmpdtim)
-  if(resist){
-    rawdata$res<-res_ma
-    rawdata$tim_ma<-tim_ma
-    intpl$res<-sim_ma[,2]
-    intpl$tim_ma<-sim_ma[,1]
-  }
-  
-  return(list(rawdata,intpl,dif_exp,dif_sim))
 }
+
+sgsmoothdata<-function(rsdata,sgwindow,dt=0.2,resist=F){
+  #rsdata consists of 4 (if resist=T, 5) columns; Time, Temp_ex, Temp_sa, Temp_re (, Resist).
+  #SG filter
+  
+  sgdata<-rsdata
+  sgdata$Temp_ex<-savgol(sgdata$Temp_ex,sgwindow,2)
+  sgdata$Temp_sa<-savgol(sgdata$Temp_sa,sgwindow,2)
+  sgdata$Temp_re<-savgol(sgdata$Temp_re,sgwindow,2)
+  
+  if(resist){
+    sgdata$Resist<-savgol(sgdata$Resist,sgwindow,2)
+  }
+  
+  
+  #dtdt
+  #*5 means sg filter span (1) / actual data span
+  dtdt<-savgol(sgdata$Temp_re,sgwindow,2,1)/dt
+  
+  #heat flow
+  hf<-(sgdata$Temp_sa-sgdata$Temp_re)/dtdt
+  
+  sgdata<-cbind(sgdata,dtdt,hf)
+  
+  
+  return(as.data.frame(sgdata))
+}
+
+
