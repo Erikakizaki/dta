@@ -34,3 +34,7 @@ dum_rsdata<-rsmplData(dum_spldata,resist = T)
 dum_sgdata<-sgsmoothdata(dum_rsdata,31,resist = T)
 
 plot(dum_sgdata$Time[30:2260],dum_sgdata$Temp_sa[30:2260] - dum_rsdata$Temp_sa[30:2260],type = "l")
+
+which(c("a","b","b")=="b")
+seq_along(c("a","b","b"))
+

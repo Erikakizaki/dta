@@ -12,30 +12,43 @@ fluidPage(
              fileInput("file", "CSVファイルをアップロードしてください",
                        accept = c(".csv", ".txt"),multiple = T),
              radioButtons("resist","抵抗値測定",c("Yes","No"),"No"),
-#             sliderInput("sgwindow","SGフィルタの幅(1ならばフィルタなし)",1,51,31,2),
-#             hr(style = "border-top: 1px solid #000000;"),
-#             actionButton("cleardata","データをクリア"),
-
-             
-             tableOutput("exp_info_table"),
-textOutput("nf")
-             
+             tableOutput("exp_info_table"),textOutput("nf")
+             ),
+    tabPanel("補間・平滑化",
+             h4("補間・平滑化"),
+             sliderInput("sgwindow","SGフィルタの幅(1ならばフィルタなし)",1,51,31,2),
+             #tableOutput("testtable"),
+             plotOutput("smoothplot")
+             ),
+    tabPanel(
+      "ベースライン",
+      h4("ベースラインフィッティング"),
+      br(),
+      selectInput(
+        "baseline_method",
+        "ベースラインフィッティングの方法",
+        choices = c(
+          "line",
+          "poly(2nd)",
+          "poly(3rd)",
+          "poly(4th)",
+          "2 points",
+          "2 line 2nd connection"
+        ),
+        selected = "line"
+      ),
+      actionButton("apply_sub_btn", "すべてのベースライン引き算を適用", class = "btn-success"),
+      br(),
+      verbatimTextOutput("status_msg"),
+      br(),
+      br(),
+      uiOutput("data_analysis_ui")
     ),
-  tabPanel("補間・平滑化",
-         h4("補間・平滑化"),
-         
-         sliderInput("sgwindow","SGフィルタの幅(1ならばフィルタなし)",1,51,31,2),
-         
-         #tableOutput("testtable"),
-         plotOutput("smoothplot")
-         
+    tabPanel("実験情報",
+             h4("基準データ"),
+             uiOutput("stddata")
+             )
 
-         
-),
-tabPanel("ベースライン",
-         h4("ベースラインフィッティング"),
-         
-         )
 
   )
 

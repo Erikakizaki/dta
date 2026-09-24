@@ -7,12 +7,12 @@ mytheme <- theme_classic(base_family = "serif", base_size = 16) +
     axis.text.x.top = element_blank(),
     axis.text.y.right = element_blank()
   )
-dscbl<-function(dscdataK,method,t1,t2,t3,t4){
+dtabl<-function(dtadataK,method,t1,t2,t3,t4){
   if(t1<t3 || t2>t4){
     warning("ピーク範囲がベースライン範囲に含まれることを推奨します")
   }
-  TempK<-dscdataK$TempK
-  HeatFlow<-dscdataK$HeatFlow
+  TempK<-dtadataK$Temp_re
+  HeatFlow<-dtadataK$hf
   
   basel<-HeatFlow
   params<-rep(0,5)
@@ -75,21 +75,70 @@ dscbl<-function(dscdataK,method,t1,t2,t3,t4){
   
   
   HeatFlow_0<-HeatFlow-basel
-  res_df<-cbind(dscdataK,basel,HeatFlow_0)
+  res_df<-cbind(dtadataK,basel,HeatFlow_0)
   temp_sec<-c(t1,t2,t3,t4)
   
-  return(list(method=method,method_id=method_id,dsc_df=res_df,temp_sec=temp_sec,coefs=params))
+  return(list(method=method,method_id=method_id,dta_df=res_df,temp_sec=temp_sec,coefs=params))
 }
 
-#return(list(method=method,method_id=method_id,dsc_df=res_df,temp_sec=temp_sec,coefs=params))
-int_dsc<-function(res_list){
+#return(list(method=method,method_id=method_id,dta_df=res_df,temp_sec=temp_sec,coefs=params))
+int_dsc<-function(res_list,Scoef=1){
   int_list<-res_list
   
-  dsc_df<-int_list$dsc_df
+  dta_df<-int_list$dta_df
   t1<-int_list$temp_sec[1]
   t2<-int_list$temp_sec[2]
-  pt1 <- which.min(abs(dsc_df$TempK - t1))
-  pt2 <- which.min(abs(dsc_df$TempK - t2))
+  pt1 <- which.min(abs(dta_df$Temp_re - t1))
+  pt2 <- which.min(abs(dta_df$Temp_re - t2))
+  
+  if(pt1<pt2){
+    #heating
+    intsegs<-(pt1:pt2)
+    is.cooling<-F
+  }else{
+    #coolingは積分値を低温側0にする処理を加える
+    intsegs<-(pt2:pt1)
+    is.cooling<-T
+  }
+  
+  nom_HF<-dta_df$HeatFlow_0*Scoef
+  dta_df<-cbind(dta_df,nom_HF)
+  
+  dsc_intseg<-dsc_df[intsegs,]
+  H_int<-cumtrapz(dta_intseg$Temp_re,-dta_intseg$nom_HF)
+  S_int<-cumtrapz(dta_intseg$Temp_re,-1000*dta_intseg$nom_HF/dta_intseg$Temp_re)
+  DH<-H_int[length(H_int)]
+  DS<-S_int[length(S_int)]
+  
+  
+  dta_df$H<-0
+  dta_df$S<-0
+  dta_df$H[intsegs]<-H_int
+  dta_df$S[intsegs]<-S_int
+  dta_df$H[max(pt1,pt2):nrow(dta_df)]<-DH
+  dta_df$S[max(pt1,pt2):nrow(dta_df)]<-DS
+  
+  if(is.cooling){
+    dta_df$H<-dta_df$H-DH
+    dta_df$S<-dta_df$S-DS
+    DH<- -DH
+    DS<- -DS
+  }
+  
+  int_list$dta_df<-dta_df
+  int_list$DH<-DH
+  int_list$DS<-DS
+  return(int_list)
+}
+
+calcoef<-function(res_list, stdentropy){
+  int_list<-res_list
+  
+  dta_df<-int_list$dta_df
+  t1<-int_list$temp_sec[1]
+  t2<-int_list$temp_sec[2]
+  pt1 <- which.min(abs(dsc_df$Temp_re - t1))
+  pt2 <- which.min(abs(dsc_df$Temp_re - t2))
   
   if(pt1<pt2){
     #heating
@@ -103,35 +152,35 @@ int_dsc<-function(res_list){
   
   
   #dT/dt
-  dtdt<-gradient(dsc_df$TempK,dsc_df$Time)
-  nom_HF<-dsc_df$HeatFlow_0/dtdt
+  #dtdt<-gradient(dsc_df$TempK,dsc_df$Time)
+  #nom_HF<-dsc_df$HeatFlow_0/dtdt
   
-  dsc_intseg<-dsc_df[intsegs,]
+  dta_intseg<-dta_df[intsegs,]
   #integral under unit [s], not [min]
-  H_int<-cumtrapz(dsc_intseg$Time*60,-dsc_intseg$HeatFlow_0)
-  S_int<-cumtrapz(dsc_intseg$Time*60,-1000*dsc_intseg$HeatFlow_0/dsc_intseg$TempK)
-  DH<-H_int[length(H_int)]
+  #H_int<-cumtrapz(dsc_intseg$Time*60,-dsc_intseg$HeatFlow_0)
+  S_int<-cumtrapz(dta_intseg$Temp_re,-1000*dta_intseg$HeatFlow_0/dta_intseg$Temp_re)
+  #DH<-H_int[length(H_int)]
   DS<-S_int[length(S_int)]
   
-  dsc_df<-cbind(dsc_df,dtdt,nom_HF)
-  dsc_df$H<-0
-  dsc_df$S<-0
-  dsc_df$H[intsegs]<-H_int
-  dsc_df$S[intsegs]<-S_int
-  dsc_df$H[max(pt1,pt2):nrow(dsc_df)]<-DH
-  dsc_df$S[max(pt1,pt2):nrow(dsc_df)]<-DS
+  # dsc_df<-cbind(dsc_df,dtdt,nom_HF)
+  # dsc_df$H<-0
+  # dsc_df$S<-0
+  # dsc_df$H[intsegs]<-H_int
+  # dsc_df$S[intsegs]<-S_int
+  # dsc_df$H[max(pt1,pt2):nrow(dsc_df)]<-DH
+  # dsc_df$S[max(pt1,pt2):nrow(dsc_df)]<-DS
   
   if(is.cooling){
-    dsc_df$H<-dsc_df$H-DH
-    dsc_df$S<-dsc_df$S-DS
-    DH<- -DH
+    # dsc_df$H<-dsc_df$H-DH
+    # dsc_df$S<-dsc_df$S-DS
+    # DH<- -DH
     DS<- -DS
   }
   
-  int_list$dsc_df<-dsc_df
-  int_list$DH<-DH
-  int_list$DS<-DS
-  return(int_list)
+  # int_list$dsc_df<-dsc_df
+  # int_list$DH<-DH
+  # int_list$DS<-DS
+  return(stdentropy/DS)
 }
 
 
@@ -217,23 +266,27 @@ sgsmoothdata<-function(rsdata,sgwindow,dt=0.2,resist=F){
   #SG filter
   
   sgdata<-rsdata
-  sgdata$Temp_ex<-savgol(sgdata$Temp_ex,sgwindow,2)
-  sgdata$Temp_sa<-savgol(sgdata$Temp_sa,sgwindow,2)
-  sgdata$Temp_re<-savgol(sgdata$Temp_re,sgwindow,2)
+  sgdata$Temp_ex<-savgol(rsdata$Temp_ex,sgwindow,2)
+  sgdata$Temp_sa<-savgol(rsdata$Temp_sa,sgwindow,2)
+  sgdata$Temp_re<-savgol(rsdata$Temp_re,sgwindow,2)
   
   if(resist){
-    sgdata$Resist<-savgol(sgdata$Resist,sgwindow,2)
+    sgdata$Resist<-savgol(rsdata$Resist,sgwindow,2)
   }
   
   
   #dtdt
   #*5 means sg filter span (1) / actual data span
-  dtdt<-savgol(sgdata$Temp_re,sgwindow,2,1)/dt
+  dtdt<-savgol(rsdata$Temp_re,sgwindow,2,1)/dt
   
   #heat flow
-  hf<-(sgdata$Temp_sa-sgdata$Temp_re)/dtdt
+  hf<-(rsdata$Temp_sa-rsdata$Temp_re)/dtdt
   
   sgdata<-cbind(sgdata,dtdt,hf)
+  
+  dum_nrow<-nrow(sgdata)
+  
+  sgdata<-sgdata[sgwindow:(dum_nrow - sgwindow),]
   
   
   return(as.data.frame(sgdata))
