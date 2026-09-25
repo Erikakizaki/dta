@@ -199,10 +199,11 @@ function(input, output, session) {
   
   #データ保存
   
-  out_list<-reactiveValues()
   
+  out_list<-reactiveValues()
   observeEvent(input$apply_sub_btn, {
     req(fileinfos(), sgdatas())
+    
     files <- fileinfos()$file$name
     
     lapply(seq_along(files), function(i) {
@@ -222,7 +223,7 @@ function(input, output, session) {
       }
     })
     output$status_msg <- renderText({
-      paste0(" ベースライン引き算処理が完了し、`tb` に 'HF_sub' 列が追加/更新されました。")
+      paste0(" ベースライン引き算処理が完了しました。")
     })
   })
   
@@ -256,30 +257,88 @@ function(input, output, session) {
   })
   
   
-  out_list<-reactiveValues()
+
+  
+  
+  #変換定数計算
+  
+  expsetting<-reactiveValues()
   observeEvent(input$apply_stddata_btn, {
-    req(fileinfos(), sgdatas(),out_list)
+    req(fileinfos(),out_list)
+    
+    
+    expsetting$stdfile<-input$stdfile
+    expsetting$stdS<-as.numeric(input$stdS)
+    
     files <- fileinfos()$file$name
     
-    lapply(seq_along(files), function(i) {
-      data_id <- paste0("data_", i)
-      range_id <- paste0("peak_range_", i)
-      fitrng_id <- paste0("fit_range_", i)
+    if(length(names(out_list))==0){
+      output$status_msg2 <- renderText({
+        paste0("先にベースライン引きを実行してください")
+      })
+    }else{
+      stdid<-which(files==expsetting$stdfile)
+      Scoef<-calcoef(out_list[[paste0("data_",stdid)]],expsetting$stdS)
       
-      df <- sgdatas()[[i]]
-      rng <- input[[range_id]]
-      fitrng <- input[[fitrng_id]]
-      if (!is.null(rng)) {
-        t1 <- rng[1]
-        t2 <- rng[2]
-        t3 <- fitrng[1]
-        t4 <- fitrng[2]
-        out_list[[data_id]] <- dtabl(df,input$baseline_method,t1,t2,t3,t4)
-      }
-    })
-    output$status_msg <- renderText({
-      paste0(" ベースライン引き算処理が完了し、`tb` に 'HF_sub' 列が追加/更新されました。")
-    })
+      expsetting$Scoef<-Scoef
+      
+      lapply(seq_along(files), function(i) {
+        press_id<-paste0("press_", i)
+        
+        expsetting[[press_id]]<-input[[press_id]]
+      })
+      
+      output$status_msg2 <- renderText({
+        paste0("実験データを設定しました; ",expsetting$stdfile,", coefficient; ",Scoef)
+      })
+    }
+    
+    
   })
+  
+  #エントロピー計算・まとめ
+  observeEvent(input$summary_btn, {
+    req(fileinfos(),out_list,expsetting)
+    files <- fileinfos()$file$name
+    Scoef<-expsetting$Scoef
+    
+    output$summary <- renderUI({
+      n_reports <- length(files)
+      
+      # まだ解析が行われていない場合
+      if (n_reports == 0) {
+        return(p("まだ解析結果がありません。解析を実行してください。"))
+      }
+      
+      # 1〜n回分の要素を lapply で動的に作成する
+      report_elements <- lapply(seq_along(files), function(i) {
+        data_id <- paste0("data_", i)
+        res<-int_dta(out_list[[data_id]],Scoef)
+        out_list[[data_id]] <- res
+        
+        # 一意のIDを付与するための文字列
+        plot_id <- paste0("plot_", i)
+        print(plot_id)
+        # 各解析回ごとのUIブロック（パネルやボーダーで囲むと見やすい）
+        div(
+          style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
+          h4(paste0("解析回数: #", i)),
+          
+          # ピーク範囲のテキスト表示
+          p(strong("ピーク範囲: "), paste0(res$temp_sec[1], " K ~ ", res$temp_sec[2], " K")),
+          p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1"))
+          
+          # グラフの描画用 output
+          # ※動的生成するプロットのサイズや出力先を指定
+          #plotOutput(plot_id, height = "300px")
+        )
+      })
+      
+      # リストをタグリストに変換して返す
+      do.call(tagList, report_elements)
+    })
+   
+  })
+  
 
 }

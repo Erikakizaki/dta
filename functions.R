@@ -82,7 +82,7 @@ dtabl<-function(dtadataK,method,t1,t2,t3,t4){
 }
 
 #return(list(method=method,method_id=method_id,dta_df=res_df,temp_sec=temp_sec,coefs=params))
-int_dsc<-function(res_list,Scoef=1){
+int_dta<-function(res_list,Scoef=1){
   int_list<-res_list
   
   dta_df<-int_list$dta_df
@@ -104,7 +104,7 @@ int_dsc<-function(res_list,Scoef=1){
   nom_HF<-dta_df$HeatFlow_0*Scoef
   dta_df<-cbind(dta_df,nom_HF)
   
-  dsc_intseg<-dsc_df[intsegs,]
+  dta_intseg<-dta_df[intsegs,]
   H_int<-cumtrapz(dta_intseg$Temp_re,-dta_intseg$nom_HF)
   S_int<-cumtrapz(dta_intseg$Temp_re,-1000*dta_intseg$nom_HF/dta_intseg$Temp_re)
   DH<-H_int[length(H_int)]
@@ -137,8 +137,8 @@ calcoef<-function(res_list, stdentropy){
   dta_df<-int_list$dta_df
   t1<-int_list$temp_sec[1]
   t2<-int_list$temp_sec[2]
-  pt1 <- which.min(abs(dsc_df$Temp_re - t1))
-  pt2 <- which.min(abs(dsc_df$Temp_re - t2))
+  pt1 <- which.min(abs(dta_df$Temp_re - t1))
+  pt2 <- which.min(abs(dta_df$Temp_re - t2))
   
   if(pt1<pt2){
     #heating
@@ -152,32 +152,32 @@ calcoef<-function(res_list, stdentropy){
   
   
   #dT/dt
-  #dtdt<-gradient(dsc_df$TempK,dsc_df$Time)
-  #nom_HF<-dsc_df$HeatFlow_0/dtdt
+  #dtdt<-gradient(dta_df$TempK,dta_df$Time)
+  #nom_HF<-dta_df$HeatFlow_0/dtdt
   
   dta_intseg<-dta_df[intsegs,]
   #integral under unit [s], not [min]
-  #H_int<-cumtrapz(dsc_intseg$Time*60,-dsc_intseg$HeatFlow_0)
+  #H_int<-cumtrapz(dta_intseg$Time*60,-dta_intseg$HeatFlow_0)
   S_int<-cumtrapz(dta_intseg$Temp_re,-1000*dta_intseg$HeatFlow_0/dta_intseg$Temp_re)
   #DH<-H_int[length(H_int)]
   DS<-S_int[length(S_int)]
   
-  # dsc_df<-cbind(dsc_df,dtdt,nom_HF)
-  # dsc_df$H<-0
-  # dsc_df$S<-0
-  # dsc_df$H[intsegs]<-H_int
-  # dsc_df$S[intsegs]<-S_int
-  # dsc_df$H[max(pt1,pt2):nrow(dsc_df)]<-DH
-  # dsc_df$S[max(pt1,pt2):nrow(dsc_df)]<-DS
+  # dta_df<-cbind(dta_df,dtdt,nom_HF)
+  # dta_df$H<-0
+  # dta_df$S<-0
+  # dta_df$H[intsegs]<-H_int
+  # dta_df$S[intsegs]<-S_int
+  # dta_df$H[max(pt1,pt2):nrow(dta_df)]<-DH
+  # dta_df$S[max(pt1,pt2):nrow(dta_df)]<-DS
   
   if(is.cooling){
-    # dsc_df$H<-dsc_df$H-DH
-    # dsc_df$S<-dsc_df$S-DS
+    # dta_df$H<-dta_df$H-DH
+    # dta_df$S<-dta_df$S-DS
     # DH<- -DH
     DS<- -DS
   }
   
-  # int_list$dsc_df<-dsc_df
+  # int_list$dta_df<-dta_df
   # int_list$DH<-DH
   # int_list$DS<-DS
   return(stdentropy/DS)

@@ -46,7 +46,14 @@ fluidPage(
     ),
     tabPanel("実験情報",
              h4("基準データ"),
-             uiOutput("stddata")
+             uiOutput("stddata"),
+             br(),
+             verbatimTextOutput("status_msg2")
+             ),
+    tabPanel("結果",
+             h4("レポート作成"),
+             actionButton("summary_btn", "実行", class = "btn-success"),
+             uiOutput("summary")
              )
 
 
