@@ -298,10 +298,34 @@ function(input, output, session) {
   
   #エントロピー計算・まとめ
   observeEvent(input$summary_btn, {
-    req(fileinfos(),out_list,expsetting)
+    req(fileinfos(), out_list, expsetting)
     files <- fileinfos()$file$name
-    Scoef<-expsetting$Scoef
+    Scoef <- expsetting$Scoef
+    # -------------------------------------------------------------
+    # 【1】データの計算および out_list の更新処理（renderUI の外で実施）
+    # -------------------------------------------------------------
+    for (i in seq_along(files)) {
+      data_id <- paste0("data_", i)
+      # 既存のデータを計算して上書き
+      res <- int_dta(out_list[[data_id]], Scoef)
+      out_list[[data_id]] <- res
+      
+      plot_id <- paste0("plotf_", i)
+      p <- ggplot(res$dta_df, aes(x = Temp_re, y = nom_HF)) +
+        geom_line(color = "black") +
+        labs(
+          x = "Temperature (K)",
+          y = "Heat Flow (arb. unit)"
+        ) +
+        mytheme + mirror_x + mirror_y
+      
+      output[[plot_id]]<-renderPlot({p})
+      
+    }
     
+    # -------------------------------------------------------------
+    # 【2】UIの描画処理（データの更新・書き込みは絶対に行わない）
+    # -------------------------------------------------------------
     output$summary <- renderUI({
       n_reports <- length(files)
       
@@ -313,31 +337,27 @@ function(input, output, session) {
       # 1〜n回分の要素を lapply で動的に作成する
       report_elements <- lapply(seq_along(files), function(i) {
         data_id <- paste0("data_", i)
-        res<-int_dta(out_list[[data_id]],Scoef)
-        out_list[[data_id]] <- res
         
-        # 一意のIDを付与するための文字列
-        plot_id <- paste0("plot_", i)
-        print(plot_id)
-        # 各解析回ごとのUIブロック（パネルやボーダーで囲むと見やすい）
+        # ★ここでは out_list の「参照（読み込み）」のみを行う
+        res <- out_list[[data_id]]
+        plot_id <- paste0("plotf_", i)
+        
         div(
           style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
           h4(paste0("解析回数: #", i)),
           
-          # ピーク範囲のテキスト表示
+          # ピーク範囲およびエントロピー変化のテキスト表示
           p(strong("ピーク範囲: "), paste0(res$temp_sec[1], " K ~ ", res$temp_sec[2], " K")),
-          p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1"))
-          
-          # グラフの描画用 output
-          # ※動的生成するプロットのサイズや出力先を指定
-          #plotOutput(plot_id, height = "300px")
+          p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1")),
+          br(),
+          # グラフの描画用 output（必要に応じて有効化）
+          plotOutput(plot_id)
         )
       })
       
       # リストをタグリストに変換して返す
       do.call(tagList, report_elements)
     })
-   
   })
   
 
