@@ -2,11 +2,6 @@ library(shiny)
 library(ggplot2)
 library(tidyr)
 library(patchwork)
-
-
-
-# ggplot2用の共通テーマ・軸設定 (functions_2.R より)
-
 library(pracma)
 source("functions.R")
 
@@ -48,11 +43,8 @@ function(input, output, session) {
            )
     
   })
-  
 
 #smooth
-  
-  
   sgdatas<- reactive({
     req(fileinfos,input$sgwindow)
     sgdts<-list()
@@ -299,106 +291,126 @@ function(input, output, session) {
   #エントロピー計算・まとめ
   observeEvent(input$summary_btn, {
     req(fileinfos(), out_list, expsetting)
+    
     files <- fileinfos()$file$name
     Scoef <- expsetting$Scoef
-    pall<-ggplot() +
+    n_reports <- length(files)
+    
+    if (n_reports == 0) return()
+    
+    # 全体プロット用のベースオブジェクト初期化
+    pall <- ggplot() +
       labs(
         x = "Temperature (K)",
         y = "Heat Flow (arb. unit)"
       ) +
       mytheme + mirror_x + mirror_y
+    
     # -------------------------------------------------------------
-    # 【1】データの計算および out_list の更新処理（renderUI の外で実施）
+    # 【1】データの計算、個別プロットの登録、全体プロットの構築
     # -------------------------------------------------------------
-    for (i in seq_along(files)) {
+    for (i in seq_len(n_reports)) {
+      data_id <- paste0("data_", i)
+      plot_id <- paste0("plotf_", i)
+      
+      # データの計算と out_list への代入
+      res <- int_dta(out_list[[data_id]], Scoef)
+      
+      # -------------------------------------------------------------
+      # 【対策1】dta_df の列名に重複があれば一意にする (make.unique)
+      # -------------------------------------------------------------
+      if (any(duplicated(names(res$dta_df)))) {
+        names(res$dta_df) <- make.unique(names(res$dta_df))
+      }
+      
+      # file列を安全に追加・更新 (既に同名列があった場合も上書き)
+      res$dta_df[["file"]] <- files[i]
+      
+      out_list[[data_id]] <- res
+      
+      # 色の安全な指定 (cudの長さチェック)
+      line_color <- if (!is.null(cud) && length(cud) >= i) cud[i] else "black"
+      
+      # 全体グラフ (pall) に要素を追記
+      pall <- pall + geom_line(data = res$dta_df, mapping = aes(x = Temp_re, y = nom_HF), color = line_color)
+      
+      # 個別プロット登録 (local で変数固定)
       local({
-        my_i <- i
-        data_id <- paste0("data_", my_i)
-        plot_id <- paste0("plotf_", my_i)
+        my_res <- res
+        my_color <- line_color
         
-        # 既存のデータを計算して上書き
-        res <- int_dta(out_list[[data_id]], Scoef)
-        res$dta_df$file <- files[my_i]
-        out_list[[data_id]] <- res
-        
-        # プロットを作成
-        p <- ggplot() +
-          geom_line(data=res$dta_df, mapping=aes(x = Temp_re, y = nom_HF),color = cud[my_i]) +
+        p1 <- ggplot() +
+          geom_line(data = my_res$dta_df, mapping = aes(x = Temp_re, y = nom_HF), color = my_color) +
           labs(
             x = "Temperature (K)",
             y = "Heat Flow (arb. unit)"
           ) +
           mytheme + mirror_x + mirror_y
-        pall<<-pall+geom_line(data=res$dta_df, mapping=aes(x = Temp_re, y = nom_HF),color = cud[my_i])
-        # local 内なので my_i / p の値が固定される
-        output[[plot_id]] <- renderPlot({ p })
         
+        p2 <-  ggplot() +
+          geom_line(data = my_res$dta_df, mapping = aes(x = Temp_re, y = dtdt*60), color = my_color) +
+          labs(
+            x = "Temperature (K)",
+            y = "Heating rate (K / min)"
+          ) +
+          mytheme + mirror_x + mirror_y
+        
+        if(input$resist=="Yes"){
+          p3 <- ggplot() +
+            geom_line(data = my_res$dta_df, mapping = aes(x = Temp_re, y = Resist), color = my_color) +
+            labs(
+              x = "Temperature (K)",
+              y = "resistance"
+            ) +
+            mytheme + mirror_x + mirror_y
+          p<-p1/p2/p3
+        }else{
+          p<-p1/p2
+        }
+        
+        output[[plot_id]] <- renderPlot({ p })
       })
     }
-    output$plotall<- renderPlot({ pall })
+    
+    # まとめグラフの出力登録
+    output$plotall <- renderPlot({ pall })
     
     # -------------------------------------------------------------
-    # 【2】UIの描画処理（データの更新・書き込みは絶対に行わない）
+    # 【2】UIの描画処理 (構造をシンプルに整理)
     # -------------------------------------------------------------
     output$summary <- renderUI({
-      n_reports <- length(files)
-      
-      # まだ解析が行われていない場合
-      if (n_reports == 0) {
-        return(p("まだ解析結果がありません。解析を実行してください。"))
-      }
-      
-      # 1〜n回分の要素を lapply で動的に作成する
-      report_elements <- lapply(seq_along(files), function(i) {
+      # 各解析結果のUIカードリストを作成
+      report_elements <- lapply(seq_len(n_reports), function(i) {
         data_id <- paste0("data_", i)
-        
-        # ★ここでは out_list の「参照（読み込み）」のみを行う
         res <- out_list[[data_id]]
         plot_id <- paste0("plotf_", i)
         
-        if(i == length(files)){
-          list(
-            div(
-              style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
-              h4(paste0("解析回数: #", i)),
-              
-              # ピーク範囲およびエントロピー変化のテキスト表示
-              p(strong("ピーク範囲: "), paste0(res$temp_sec[1], " K ~ ", res$temp_sec[2], " K")),
-              p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1")),
-              br(),
-              # グラフの描画用 output（必要に応じて有効化）
-              plotOutput(plot_id)
-            ),
-            div(
-              style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
-              h4("まとめて表示"),
-              plotOutput("plotall")
-            ),
-            div(
-              h4("データのダウンロード"),
-              downloadButton("download_csv", "csvをダウンロード"),
-              downloadButton("download_exp", "解析条件を保存")
-            )
-          )
-        }else{
-          div(
-            style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
-            h4(paste0("解析回数: #", i)),
-            
-            # ピーク範囲およびエントロピー変化のテキスト表示
-            p(strong("ピーク範囲: "), paste0(res$temp_sec[1], " K ~ ", res$temp_sec[2], " K")),
-            p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1")),
-            br(),
-            # グラフの描画用 output（必要に応じて有効化）
-            plotOutput(plot_id)
-          )
-        }
-        
-        
+        div(
+          style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
+          h4(paste0("解析回数: #", i, " (", files[i], ")")),
+          p(strong("ピーク範囲: "), paste0(res$temp_sec[1], " K ~ ", res$temp_sec[2], " K")),
+          p(strong("エントロピー変化: "), paste0(res$DS, " J K-1 kg-1")),
+          br(),
+          plotOutput(plot_id,height = "900px")
+        )
       })
       
-      # リストをタグリストに変換して返す
-      do.call(tagList, report_elements)
+      # 全体まとめ・ダウンロード領域のUI
+      summary_footer <- tagList(
+        div(
+          style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
+          h4("まとめて表示"),
+          plotOutput("plotall")
+        ),
+        div(
+          h4("データのダウンロード"),
+          downloadButton("download_csv", "csvをダウンロード"),
+          downloadButton("download_exp", "解析条件を保存")
+        )
+      )
+      
+      # リスト要素とフッターをまとめて1つの tagList にして返す
+      do.call(tagList, c(report_elements, list(summary_footer)))
     })
   })
   
@@ -437,7 +449,6 @@ function(input, output, session) {
           datalst$method,
           datalst$coefs,
           datalst$temp_sec,
-          
           datatemp[1],
           tail(datatemp,1),
           input[[press_id]]

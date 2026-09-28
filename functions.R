@@ -301,5 +301,6 @@ cud<-c(
   pink="#FF8082",
   orange="#F6AA00",
   purple="#990099",
-  brown="#804000"
+  brown="#804000",
+  kublue="#00205B"
 )
