@@ -37,4 +37,4 @@ plot(dum_sgdata$Time[30:2260],dum_sgdata$Temp_sa[30:2260] - dum_rsdata$Temp_sa[3
 
 which(c("a","b","b")=="b")
 seq_along(c("a","b","b"))
-
+as.vector(t(outer(c("Tp_","Tb_","Tm_"), c("start","end"), paste0)))

@@ -292,4 +292,14 @@ sgsmoothdata<-function(rsdata,sgwindow,dt=0.2,resist=F){
   return(as.data.frame(sgdata))
 }
 
-
+cud<-c(
+  red="#FF4B00",
+  yellow="#FFF100",
+  green="#03AF7A",
+  blue="#005AFF",
+  sky="#4DC4FF",
+  pink="#FF8082",
+  orange="#F6AA00",
+  purple="#990099",
+  brown="#804000"
+)
