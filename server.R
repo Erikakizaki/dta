@@ -305,21 +305,27 @@ function(input, output, session) {
     # 【1】データの計算および out_list の更新処理（renderUI の外で実施）
     # -------------------------------------------------------------
     for (i in seq_along(files)) {
-      data_id <- paste0("data_", i)
-      # 既存のデータを計算して上書き
-      res <- int_dta(out_list[[data_id]], Scoef)
-      out_list[[data_id]] <- res
-      
-      plot_id <- paste0("plotf_", i)
-      p <- ggplot(res$dta_df, aes(x = Temp_re, y = nom_HF)) +
-        geom_line(color = "black") +
-        labs(
-          x = "Temperature (K)",
-          y = "Heat Flow (arb. unit)"
-        ) +
-        mytheme + mirror_x + mirror_y
-      
-      output[[plot_id]]<-renderPlot({p})
+      local({
+        my_i <- i
+        data_id <- paste0("data_", my_i)
+        plot_id <- paste0("plotf_", my_i)
+        
+        # 既存のデータを計算して上書き
+        res <- int_dta(out_list[[data_id]], Scoef)
+        out_list[[data_id]] <- res
+        
+        # プロットを作成
+        p <- ggplot(res$dta_df, aes(x = Temp_re, y = nom_HF)) +
+          geom_line(color = "black") +
+          labs(
+            x = "Temperature (K)",
+            y = "Heat Flow (arb. unit)"
+          ) +
+          mytheme + mirror_x + mirror_y
+        
+        # local 内なので my_i / p の値が固定される
+        output[[plot_id]] <- renderPlot({ p })
+      })
       
     }
     
@@ -341,6 +347,8 @@ function(input, output, session) {
         # ★ここでは out_list の「参照（読み込み）」のみを行う
         res <- out_list[[data_id]]
         plot_id <- paste0("plotf_", i)
+        
+        
         
         div(
           style = "border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px;",
